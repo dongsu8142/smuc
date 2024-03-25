@@ -1,0 +1,15 @@
+[package]
+name = "smuc-server"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tokio.workspace = true
+serde_json.workspace = true
+structs.workspace = true
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
