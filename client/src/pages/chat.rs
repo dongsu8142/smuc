@@ -1,6 +1,6 @@
 use iced::{
-    widget::{row, scrollable, Button, Column, Text, TextInput},
     Element, Length,
+    widget::{Button, Column, Text, TextInput, row, scrollable},
 };
 use structs::ResMsg;
 
@@ -11,7 +11,7 @@ pub fn chat_page(messages: Vec<ResMsg>, msg_input: String) -> Element<'static, M
         .push(
             Column::new()
                 .spacing(5)
-                .align_items(iced::Alignment::Start)
+                .align_x(iced::Alignment::Start)
                 .push(Text::new("Messages:").size(24))
                 .push(
                     scrollable(
@@ -42,6 +42,7 @@ pub fn chat_page(messages: Vec<ResMsg>, msg_input: String) -> Element<'static, M
                 .push(
                     TextInput::new("Message", &msg_input)
                         .on_input(Message::MsgFieldChanged)
+                        .on_submit(Message::MsgSend)
                         .padding(10)
                         .width(Length::Fill),
                 )

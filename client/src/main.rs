@@ -1,4 +1,6 @@
-use iced::{futures::channel::mpsc, widget::container, Element, Subscription, Theme};
+use iced::{
+    Element, Subscription, Task, Theme, futures::channel::mpsc, keyboard, widget, widget::container,
+};
 use pages::{chat::chat_page, login::login_page};
 use structs::{Color, ReqLogin, Request, RequestData, ResMsg};
 
@@ -6,9 +8,10 @@ mod client;
 mod pages;
 
 fn main() -> iced::Result {
-    iced::program(Layout::title, Layout::update, Layout::view)
-        .subscription(Layout::subscription)
-        .theme(Layout::theme)
+    iced::application(Layout::default, app_update, app_view)
+        .title(Layout::title)
+        .subscription(app_subscription)
+        .theme(app_theme)
         .run()
 }
 
@@ -43,12 +46,13 @@ enum Message {
     MsgSend,
     LoginFieldChanged(String, String, Color),
     MsgFieldChanged(String),
+    Keyboard(keyboard::Event),
 }
 
 impl Default for Layout {
     fn default() -> Self {
         Self {
-            theme: Theme::default(),
+            theme: Theme::Dark,
             page: Page::Login,
             disconected: false,
             login_field: LoginField {
@@ -69,10 +73,13 @@ impl Layout {
     }
 
     fn subscription(&self) -> Subscription<Message> {
+        let keys = iced_futures::keyboard::listen().map(Message::Keyboard);
         if self.disconected {
-            Subscription::none()
+            // Still listen to keyboard events so Tab/Enter work on the login screen
+            keys
         } else {
-            client::connect(self.login_field.url.clone()).map(Message::Subscription)
+            let conn = client::connect(self.login_field.url.clone()).map(Message::Subscription);
+            Subscription::batch(vec![conn, keys])
         }
     }
 
@@ -128,10 +135,13 @@ impl Layout {
             Message::MsgFieldChanged(mgs) => {
                 self.msg_input = mgs;
             }
+            Message::Keyboard(_) => {
+                // Handled in the app_update adapter; ignore here to keep match exhaustive.
+            }
         }
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view(&self) -> Element<'_, Message> {
         let content = match self.page {
             Page::Login => login_page(&self.login_field),
             Page::Chat => chat_page(self.messages.clone(), self.msg_input.clone()),
@@ -143,4 +153,41 @@ impl Layout {
     fn theme(&self) -> Theme {
         self.theme.clone()
     }
+}
+
+// Adapter functions for the iced 0.14 application builder
+fn app_update(state: &mut Layout, message: Message) -> Task<Message> {
+    match message {
+        Message::Keyboard(event) => match event {
+            keyboard::Event::KeyPressed { key, .. } => {
+                use iced::keyboard::key::Key as KKey;
+                use iced::keyboard::key::Named as KNamed;
+                match key.as_ref() {
+                    KKey::Named(KNamed::Tab) => {
+                        // Focus next widget
+                        return widget::operation::focus_next::<Message>();
+                    }
+                    _ => {}
+                }
+                Task::none()
+            }
+            _ => Task::none(),
+        },
+        other => {
+            Layout::update(state, other);
+            Task::none()
+        }
+    }
+}
+
+fn app_view(state: &Layout) -> Element<'_, Message> {
+    Layout::view(state)
+}
+
+fn app_subscription(state: &Layout) -> Subscription<Message> {
+    Layout::subscription(state)
+}
+
+fn app_theme(state: &Layout) -> Option<Theme> {
+    Some(Layout::theme(state))
 }

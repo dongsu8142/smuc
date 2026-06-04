@@ -9,7 +9,7 @@ resolver = "2"
 version = "0.1.0"
 authors = ["Dongsu Han"]
 description = "Simple Multi-User Chat"
-edition = "2021"
+edition = "2024"
 license = "MIT"
 repository = "https://github.com/dongsu8142/smuc"
 

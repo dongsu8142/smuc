@@ -1,11 +1,11 @@
 use iced::{
-    widget::{container, pick_list, Button, Column, TextInput},
     Element, Length,
+    widget::{Button, Column, TextInput, container, pick_list},
 };
 
 use crate::{Color, LoginField, Message};
 
-pub fn login_page(login_field: &LoginField) -> Element<Message> {
+pub fn login_page(login_field: &LoginField) -> Element<'_, Message> {
     container(
         Column::new()
             .spacing(10)
@@ -18,6 +18,7 @@ pub fn login_page(login_field: &LoginField) -> Element<Message> {
                             login_field.color.clone(),
                         )
                     })
+                    .on_submit(Message::LoginSubmit)
                     .padding(10)
                     .width(300),
             )
@@ -30,6 +31,7 @@ pub fn login_page(login_field: &LoginField) -> Element<Message> {
                             login_field.color.clone(),
                         )
                     })
+                    .on_submit(Message::LoginSubmit)
                     .padding(10)
                     .width(300),
             )
@@ -53,7 +55,7 @@ pub fn login_page(login_field: &LoginField) -> Element<Message> {
     )
     .width(Length::Fill)
     .height(Length::Fill)
-    .center_x()
-    .center_y()
+    .center_x(Length::Fill)
+    .center_y(Length::Fill)
     .into()
 }
