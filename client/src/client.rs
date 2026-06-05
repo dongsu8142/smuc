@@ -17,11 +17,6 @@ pub enum Event {
     Response(Response),
 }
 
-pub enum State {
-    Disconnect,
-    Connected(mpsc::Receiver<Request>, TcpStream),
-}
-
 struct ConnectRecipe {
     addr: String,
 }
@@ -43,38 +38,31 @@ impl iced_futures::subscription::Recipe for ConnectRecipe {
         iced_futures::boxed_stream(stream::channel(
             100,
             move |mut output: mpsc::Sender<Event>| async move {
-                let mut state = State::Disconnect;
+                let mut buf = vec![0; u16::MAX.into()];
 
-                loop {
-                    let mut buf = vec![0; u16::MAX.into()];
-                    match &mut state {
-                        State::Disconnect => match TcpStream::connect(&addr).await {
-                            Ok(stream) => {
-                                let (tx, rx) = mpsc::channel(100);
-                                output.send(Event::Connected(tx)).await.unwrap();
-                                state = State::Connected(rx, stream);
-                            }
-                            Err(_) => {
-                                output.send(Event::FailConnection).await.unwrap();
-                            }
-                        },
-                        State::Connected(rx, stream) => {
-                            let (mut reader, mut writer) = stream.split();
+                match TcpStream::connect(&addr).await {
+                    Ok(stream) => {
+                        let (tx, mut rx) = mpsc::channel(100);
+                        let _ = output.send(Event::Connected(tx)).await;
 
+                        let (mut reader, mut writer) = stream.into_split();
+
+                        loop {
                             tokio::select! {
                                 result = reader.read(&mut buf) => {
                                     match result {
                                         Ok(0) => {
-                                            continue;
+                                            let _ = output.send(Event::FailConnection).await;
+                                            break;
                                         }
                                         Ok(bytes) => {
                                             let data = String::from_utf8_lossy(&buf[..bytes]).to_string();
                                             let response: Response = serde_json::from_str(&data).unwrap();
-                                            output.send(Event::Response(response)).await.unwrap();
+                                            let _ = output.send(Event::Response(response)).await;
                                         }
                                         Err(_) => {
                                             let _ = output.send(Event::FailConnection).await;
-                                            state = State::Disconnect;
+                                            break;
                                         }
                                     }
                                 }
@@ -82,11 +70,14 @@ impl iced_futures::subscription::Recipe for ConnectRecipe {
                                     let data = serde_json::to_string(&msg).unwrap();
                                     if writer.write_all(data.as_bytes()).await.is_err() {
                                         let _ = output.send(Event::FailConnection).await;
-                                        state = State::Disconnect;
+                                        break;
                                     }
                                 }
                             }
                         }
+                    }
+                    Err(_) => {
+                        let _ = output.send(Event::FailConnection).await;
                     }
                 }
             },
