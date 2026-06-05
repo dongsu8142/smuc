@@ -58,7 +58,9 @@ impl Default for Layout {
         Self {
             theme: Theme::Dark,
             page: Page::Login,
-            disconected: false,
+            // Start in disconnected state so we don't attempt to auto-connect on app
+            // launch and show a failure toast immediately.
+            disconected: true,
             login_field: LoginField {
                 url: "".to_string(),
                 name: "".to_string(),
@@ -94,6 +96,11 @@ impl Layout {
                 client::Event::FailConnection => {
                     self.disconected = true;
                     self.page = Page::Login;
+                    self.toasts.push(
+                        toast(&format!("Failed to connect to {}", self.login_field.url))
+                            .title("Connection")
+                            .level(ToastLevel::Error),
+                    );
                 }
                 client::Event::Connected(mut sender) => {
                     sender
@@ -107,6 +114,11 @@ impl Layout {
                         .unwrap();
                     self.page = Page::Chat;
                     self.sender = Some(sender);
+                    self.toasts.push(
+                        toast(&format!("Connected to {}", self.login_field.url))
+                            .title("Connection")
+                            .level(ToastLevel::Success),
+                    );
                 }
                 client::Event::Response(res) => match res.data {
                     structs::ResponseData::Err(err) => {
@@ -132,7 +144,17 @@ impl Layout {
                 },
             },
             Message::LoginSubmit => {
-                self.disconected = false;
+                // Only try to connect if a URL was provided. Otherwise show a helpful
+                // toast and remain in the login view.
+                if self.login_field.url.trim().is_empty() {
+                    self.toasts.push(
+                        toast("Please enter a server URL")
+                            .title("Connection")
+                            .level(ToastLevel::Warning),
+                    );
+                } else {
+                    self.disconected = false;
+                }
             }
             Message::MsgSend => {
                 if self.msg_input.trim().is_empty() {
