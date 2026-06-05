@@ -3,7 +3,7 @@ use structs::{Request, RequestData, ResError, ResMsg, Response, ResponseData, Us
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
-    sync::{broadcast::Sender, Mutex},
+    sync::{Mutex, broadcast::Sender},
 };
 
 pub async fn handler(
@@ -13,7 +13,6 @@ pub async fn handler(
     tx: Sender<String>,
 ) {
     let mut rx = tx.subscribe();
-    tracing::info!("{} joined", addr);
     loop {
         let mut buf = vec![0; u16::MAX.into()];
         tokio::select! {
@@ -48,9 +47,9 @@ pub async fn handler(
 
                 match (data.status.as_str(), &data.data) {
                     ("LOGIN", RequestData::Login(data)) => {
-                        let mut add_user = chat.lock().await;
+                        let mut users = chat.lock().await;
 
-                        for i in add_user.iter() {
+                        for i in users.iter() {
                             if i.1.name == data.name {
                                 let error = Response {
                                 status: "ERR".to_string(),
@@ -64,12 +63,12 @@ pub async fn handler(
                                 .await
                                 .unwrap();
 
-                                tracing::info!("{} left", addr);
+                                tracing::info!("{} left. addr: {}", data.name, addr);
                                 return;
                             }
                         }
 
-                            add_user.insert(
+                            users.insert(
                                 addr,
                                 UserData {
                                     name: data.name.clone(),
@@ -77,6 +76,12 @@ pub async fn handler(
                                     addr,
                                 },
                             );
+                            let res = Response {
+                                status: "JOIN".to_string(),
+                                data: ResponseData::Join(data.name.clone()),
+                            };
+                            tx.send(serde_json::to_string(&res).unwrap()).unwrap();
+                            tracing::info!("{} joined. addr: {}", data.name, addr);
 
                     }
                     ("MSG", RequestData::Msg(msg)) => {
@@ -117,7 +122,13 @@ pub async fn handler(
             }
         };
     }
-    let mut add_user = chat.lock().await;
-    add_user.remove(&addr);
-    tracing::info!("{} left", addr);
+    let mut users = chat.lock().await;
+    let username = users.get(&addr).unwrap().name.clone();
+    users.remove(&addr);
+    let res = Response {
+        status: "LEAVE".to_string(),
+        data: ResponseData::Leave(username.clone()),
+    };
+    tx.send(serde_json::to_string(&res).unwrap()).unwrap();
+    tracing::info!("{} left. addr: {}", username, addr);
 }

@@ -11,6 +11,7 @@ repository.workspace = true
 # iced = { git = "https://github.com/iced-rs/iced.git", branch = "master", features = ["tokio"] }
 iced = { version = "0.14", features = ["tokio"] }
 iced_futures = "0.14"
+iced_toasts = { git = "https://github.com/Gomango999/iced-toasts.git", branch = "main" }
 tokio.workspace = true
 serde_json.workspace = true
 structs.workspace = true

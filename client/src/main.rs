@@ -4,6 +4,8 @@ use iced::{
 use pages::{chat::chat_page, login::login_page};
 use structs::{Color, ReqLogin, Request, RequestData, ResMsg};
 
+use iced_toasts::{ToastContainer, ToastId, ToastLevel, toast, toast_container};
+
 mod client;
 mod pages;
 
@@ -23,6 +25,7 @@ struct Layout {
     login_field: LoginField,
     messages: Vec<ResMsg>,
     msg_input: String,
+    toasts: ToastContainer<'static, Message>,
     sender: Option<mpsc::Sender<Request>>,
 }
 
@@ -46,6 +49,7 @@ enum Message {
     MsgSend,
     LoginFieldChanged(String, String, Color),
     MsgFieldChanged(String),
+    DismissToast(ToastId),
     Keyboard(keyboard::Event),
 }
 
@@ -62,6 +66,7 @@ impl Default for Layout {
             },
             messages: Vec::default(),
             msg_input: String::default(),
+            toasts: toast_container(Message::DismissToast),
             sender: None,
         }
     }
@@ -110,6 +115,20 @@ impl Layout {
                     structs::ResponseData::Msg(msg) => {
                         self.messages.push(msg);
                     }
+                    structs::ResponseData::Join(join) => {
+                        self.toasts.push(
+                            toast(&format!("{} joined", join))
+                                .title("Join")
+                                .level(ToastLevel::Info),
+                        );
+                    }
+                    structs::ResponseData::Leave(leave) => {
+                        self.toasts.push(
+                            toast(&format!("{} left", leave))
+                                .title("Leave")
+                                .level(ToastLevel::Info),
+                        );
+                    }
                 },
             },
             Message::LoginSubmit => {
@@ -138,6 +157,10 @@ impl Layout {
             Message::Keyboard(_) => {
                 // Handled in the app_update adapter; ignore here to keep match exhaustive.
             }
+            Message::DismissToast(id) => {
+                // Remove the toast when dismissed by user
+                self.toasts.dismiss(id);
+            }
         }
     }
 
@@ -147,7 +170,7 @@ impl Layout {
             Page::Chat => chat_page(self.messages.clone(), self.msg_input.clone()),
         };
 
-        container(content).padding(20).into()
+        self.toasts.view(container(content).padding(20))
     }
 
     fn theme(&self) -> Theme {

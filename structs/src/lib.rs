@@ -34,6 +34,8 @@ pub struct Response {
 pub enum ResponseData {
     Err(ResError),
     Msg(ResMsg),
+    Join(String),
+    Leave(String),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
