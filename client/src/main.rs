@@ -58,8 +58,6 @@ impl Default for Layout {
         Self {
             theme: Theme::Dark,
             page: Page::Login,
-            // Start in disconnected state so we don't attempt to auto-connect on app
-            // launch and show a failure toast immediately.
             disconected: true,
             login_field: LoginField {
                 url: "".to_string(),
@@ -144,8 +142,6 @@ impl Layout {
                 },
             },
             Message::LoginSubmit => {
-                // Only try to connect if a URL was provided. Otherwise show a helpful
-                // toast and remain in the login view.
                 if self.login_field.url.trim().is_empty() {
                     self.toasts.push(
                         toast("Please enter a server URL")
