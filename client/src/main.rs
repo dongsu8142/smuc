@@ -25,6 +25,8 @@ struct Layout {
     login_field: LoginField,
     messages: Vec<ResMsg>,
     msg_input: String,
+    messages_follow: bool,
+    messages_scroll: iced::widget::Id,
     toasts: ToastContainer<'static, Message>,
     sender: Option<mpsc::Sender<Request>>,
 }
@@ -49,6 +51,7 @@ enum Message {
     MsgSend,
     LoginFieldChanged(String, String, Color),
     MsgFieldChanged(String),
+    MessagesScrolled(iced::widget::scrollable::Viewport),
     DismissToast(ToastId),
     Keyboard(keyboard::Event),
 }
@@ -66,6 +69,8 @@ impl Default for Layout {
             },
             messages: Vec::default(),
             msg_input: String::default(),
+            messages_follow: true,
+            messages_scroll: iced::widget::Id::new("chat_messages"),
             toasts: toast_container(Message::DismissToast),
             sender: None,
         }
@@ -88,7 +93,7 @@ impl Layout {
         }
     }
 
-    fn update(&mut self, message: Message) {
+    fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Subscription(event) => match event {
                 client::Event::FailConnection => {
@@ -99,6 +104,7 @@ impl Layout {
                             .title("Connection")
                             .level(ToastLevel::Error),
                     );
+                    Task::none()
                 }
                 client::Event::Connected(mut sender) => {
                     sender
@@ -111,19 +117,27 @@ impl Layout {
                         })
                         .unwrap();
                     self.page = Page::Chat;
+                    self.messages_follow = true;
                     self.sender = Some(sender);
                     self.toasts.push(
                         toast(&format!("Connected to {}", self.login_field.url))
                             .title("Connection")
                             .level(ToastLevel::Success),
                     );
+                    iced::widget::operation::snap_to_end(self.messages_scroll.clone())
                 }
                 client::Event::Response(res) => match res.data {
                     structs::ResponseData::Err(err) => {
                         println!("{:?}", err);
+                        Task::none()
                     }
                     structs::ResponseData::Msg(msg) => {
                         self.messages.push(msg);
+                        if self.messages_follow {
+                            iced::widget::operation::snap_to_end(self.messages_scroll.clone())
+                        } else {
+                            Task::none()
+                        }
                     }
                     structs::ResponseData::Join(join) => {
                         self.toasts.push(
@@ -131,6 +145,7 @@ impl Layout {
                                 .title("Join")
                                 .level(ToastLevel::Info),
                         );
+                        Task::none()
                     }
                     structs::ResponseData::Leave(leave) => {
                         self.toasts.push(
@@ -138,6 +153,7 @@ impl Layout {
                                 .title("Leave")
                                 .level(ToastLevel::Info),
                         );
+                        Task::none()
                     }
                 },
             },
@@ -151,10 +167,11 @@ impl Layout {
                 } else {
                     self.disconected = false;
                 }
+                Task::none()
             }
             Message::MsgSend => {
                 if self.msg_input.trim().is_empty() {
-                    return;
+                    return Task::none();
                 }
                 self.sender
                     .as_mut()
@@ -165,19 +182,24 @@ impl Layout {
                     })
                     .unwrap();
                 self.msg_input = String::default();
+                Task::none()
             }
             Message::LoginFieldChanged(url, name, color) => {
-                self.login_field = LoginField { url, name, color }
+                self.login_field = LoginField { url, name, color };
+                Task::none()
             }
             Message::MsgFieldChanged(mgs) => {
                 self.msg_input = mgs;
+                Task::none()
             }
-            Message::Keyboard(_) => {
-                // Handled in the app_update adapter; ignore here to keep match exhaustive.
+            Message::MessagesScrolled(viewport) => {
+                self.messages_follow = is_scrollable_at_bottom(&viewport);
+                Task::none()
             }
+            Message::Keyboard(_) => Task::none(),
             Message::DismissToast(id) => {
-                // Remove the toast when dismissed by user
                 self.toasts.dismiss(id);
+                Task::none()
             }
         }
     }
@@ -185,7 +207,11 @@ impl Layout {
     fn view(&self) -> Element<'_, Message> {
         let content = match self.page {
             Page::Login => login_page(&self.login_field),
-            Page::Chat => chat_page(self.messages.clone(), self.msg_input.clone()),
+            Page::Chat => chat_page(
+                self.messages.clone(),
+                self.msg_input.clone(),
+                self.messages_scroll.clone(),
+            ),
         };
 
         self.toasts.view(container(content).padding(20))
@@ -196,7 +222,6 @@ impl Layout {
     }
 }
 
-// Adapter functions for the iced 0.14 application builder
 fn app_update(state: &mut Layout, message: Message) -> Task<Message> {
     match message {
         Message::Keyboard(event) => match event {
@@ -205,7 +230,6 @@ fn app_update(state: &mut Layout, message: Message) -> Task<Message> {
                 use iced::keyboard::key::Named as KNamed;
                 match key.as_ref() {
                     KKey::Named(KNamed::Tab) => {
-                        // Focus next widget
                         return widget::operation::focus_next::<Message>();
                     }
                     _ => {}
@@ -214,10 +238,7 @@ fn app_update(state: &mut Layout, message: Message) -> Task<Message> {
             }
             _ => Task::none(),
         },
-        other => {
-            Layout::update(state, other);
-            Task::none()
-        }
+        other => Layout::update(state, other),
     }
 }
 
@@ -231,4 +252,19 @@ fn app_subscription(state: &Layout) -> Subscription<Message> {
 
 fn app_theme(state: &Layout) -> Option<Theme> {
     Some(Layout::theme(state))
+}
+
+const SCROLL_BOTTOM_THRESHOLD: f32 = 16.0;
+
+fn is_scrollable_at_bottom(viewport: &iced::widget::scrollable::Viewport) -> bool {
+    let bounds = viewport.bounds();
+    let content_bounds = viewport.content_bounds();
+    let max_scroll_y = (content_bounds.height - bounds.height).max(0.0);
+
+    if max_scroll_y <= SCROLL_BOTTOM_THRESHOLD {
+        return true;
+    }
+
+    let current_scroll_y = viewport.absolute_offset().y;
+    (max_scroll_y - current_scroll_y) <= SCROLL_BOTTOM_THRESHOLD
 }

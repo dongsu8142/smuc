@@ -6,7 +6,11 @@ use structs::ResMsg;
 
 use crate::Message;
 
-pub fn chat_page(messages: Vec<ResMsg>, msg_input: String) -> Element<'static, Message> {
+pub fn chat_page(
+    messages: Vec<ResMsg>,
+    msg_input: String,
+    messages_scroll: iced::widget::Id,
+) -> Element<'static, Message> {
     Column::new()
         .push(
             Column::new()
@@ -18,7 +22,6 @@ pub fn chat_page(messages: Vec<ResMsg>, msg_input: String) -> Element<'static, M
                         Column::with_children(
                             messages
                                 .into_iter()
-                                // .map(|msg| Text::new(msg).size(16))
                                 .map(|msg| {
                                     row![
                                         Text::new(msg.user.clone())
@@ -32,6 +35,8 @@ pub fn chat_page(messages: Vec<ResMsg>, msg_input: String) -> Element<'static, M
                         )
                         .spacing(6),
                     )
+                    .id(messages_scroll)
+                    .on_scroll(Message::MessagesScrolled)
                     .width(Length::Fill),
                 )
                 .width(Length::Fill)
